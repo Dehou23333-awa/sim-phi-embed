@@ -1894,13 +1894,66 @@ if (new URLSearchParams(location.search).has('iframe')) {
 }
 self.onmessage = evt => {
   console.log('onmessage', evt);
-  if (evt.data instanceof File) {
+  const { data } = evt;
+  if (data instanceof File) {
     const reader1 = new FileReader();
-    reader1.readAsArrayBuffer(evt.data);
+    reader1.readAsArrayBuffer(data);
     reader1.onload = () => {
-      uploader.fireLoad(evt.data as File, reader1.result as ArrayBuffer);
+      uploader.fireLoad(data as File, reader1.result as ArrayBuffer);
     };
-  } else if (evt.data === 'play') {
+  } else if (typeof data === 'object' && data !== null) {
+    switch (data.action) {
+      case 'play':
+        if (emitter.eq('stop') && data.chart) {
+          // Auto-select chart and bgm before playing
+          if (data.chart && selectchart.value !== data.chart) {
+            selectchart.value = data.chart;
+            selectchart.dispatchEvent(new Event('change'));
+          }
+          if (data.bgm && selectbgm.value !== data.bgm) {
+            selectbgm.value = data.bgm;
+            selectbgm.dispatchEvent(new Event('change'));
+          }
+        }
+        if (emitter.eq('pause')) mainPause();
+        else if (emitter.eq('stop')) mainPlay();
+        else if (emitter.eq('play')) { mainPlay(); mainPlay(); } // restart: stop then start
+        break;
+      case 'pause':
+        if (emitter.eq('play')) mainPause();
+        else if (emitter.eq('pause')) mainPause(); // resume
+        break;
+      case 'stop':
+        if (emitter.ne('stop')) mainPlay(); // toggle to stop
+        break;
+      case 'getStatus':
+        (evt.source as Window)?.postMessage({
+          type: 'status',
+          state: emitter.eq('play') ? 'play' : emitter.eq('pause') ? 'pause' : 'stop',
+          time: timeBgm,
+          duration: duration0,
+          score: stat.scoreNum,
+          combo: stat.combo,
+          maxcombo: stat.maxcombo
+        }, '*');
+        break;
+      case 'seek':
+        if (typeof data.time === 'number') main.time = data.time;
+        break;
+      case 'setSpeed':
+        if (typeof data.speed === 'number') {
+          app.speed = data.speed;
+          selectspeed.value = '';
+        }
+        break;
+      case 'setAutoPlay':
+        app.playMode = data.auto ? 1 : 0;
+        checkAutoPlay.checked = data.auto;
+        break;
+      default:
+        console.warn('Unknown action:', data.action);
+    }
+  } else if (data === 'play') {
     mainPlay();
   }
 };

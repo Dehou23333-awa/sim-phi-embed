@@ -6,12 +6,13 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build && node scripts/build.js",
+    "build:embed": "esbuild src/embed.ts --bundle --format=esm --outfile=dist/embed.js --minify",
     "preview": "vite preview",
     "eslint:check": "eslint src",
     "eslint:format": "eslint --fix src"
   },
   "dependencies": {
-    "@sim-phi/extends": "^0.3.4",
+    "@sim-phi/extends": "file:../extends",
     "jszip": "^3.10.1",
     "md5": "^2.3.0",
     "stackblur-canvas": "^2.7.0"
