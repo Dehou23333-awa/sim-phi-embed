@@ -500,7 +500,24 @@ const soundController = new AudioController();
 const frameTimer = new FrameTimer();
 const frameAnimater = new FrameAnimater();
 frameAnimater.setCallback(mainLoop);
-const handlerHide = () => { if (document.visibilityState === 'hidden' && emitter.eq('play')) mainPause(); };
+function reportStatusToParent() {
+  if (window.parent === window) return;
+  window.parent.postMessage({
+    type: 'status',
+    state: emitter.eq('play') ? 'play' : emitter.eq('pause') ? 'pause' : 'stop',
+    time: timeBgm,
+    duration: duration0,
+    score: stat?.scoreNum || 0,
+    combo: stat?.combo || 0,
+    maxcombo: stat?.maxcombo || 0
+  }, '*');
+}
+const handlerHide = () => {
+  if (document.visibilityState === 'hidden' && emitter.eq('play')) {
+    mainPause();
+    reportStatusToParent();
+  }
+};
 document.addEventListener('visibilitychange', handlerHide);
 document.addEventListener('pagehide', handlerHide); // 兼容Safari
 let isOutOver = false;
@@ -1632,8 +1649,10 @@ async function mainPlay(): Promise<void> {
     timeIn.play();
     interact.activate();
     emitter.emit('play');
+    reportStatusToParent();
   } else {
     emitter.emit('stop');
+    reportStatusToParent();
     interact.deactive();
     audio.stop();
     frameAnimater.stop();
@@ -1707,6 +1726,7 @@ async function mainPause() {
     audio.stop();
     audio.play(res.mute, { loop: true }); // TODO: 重构
     emitter.emit('pause');
+    reportStatusToParent();
   } else {
     if (app.bgVideo != null) await playVideo(app.bgVideo, timeBgm * app.speed);
     timeIn.play();
@@ -1714,6 +1734,7 @@ async function mainPause() {
     if (isInEnd && !isOutStart) playBgm(app.bgMusic, timeBgm * app.speed);
     // console.log(app.bgVideo);
     emitter.emit('play');
+    reportStatusToParent();
   }
 }
 // Plugins
@@ -1904,12 +1925,14 @@ self.onmessage = evt => {
   } else if (typeof data === 'object' && data !== null) {
     switch (data.action) {
       case 'play':
-        if (emitter.eq('stop') && data.chart) {
-          // Auto-select chart and bgm before playing
-          if (data.chart && selectchart.value !== data.chart) {
+        if (emitter.eq('stop')) {
+          const prevChart = selectchart.value;
+          if (data.chart) {
             selectchart.value = data.chart;
-            selectchart.dispatchEvent(new Event('change'));
+          } else if (!selectchart.value) {
+            selectchart.value = [...selectchart.options].reverse().find(o => o.value)?.value ?? selectchart.value;
           }
+          if (selectchart.value !== prevChart) selectchart.dispatchEvent(new Event('change'));
           if (data.bgm && selectbgm.value !== data.bgm) {
             selectbgm.value = data.bgm;
             selectbgm.dispatchEvent(new Event('change'));
@@ -1917,7 +1940,6 @@ self.onmessage = evt => {
         }
         if (emitter.eq('pause')) mainPause();
         else if (emitter.eq('stop')) mainPlay();
-        else if (emitter.eq('play')) { mainPlay(); mainPlay(); } // restart: stop then start
         break;
       case 'pause':
         if (emitter.eq('play')) mainPause();
@@ -1934,7 +1956,8 @@ self.onmessage = evt => {
           duration: duration0,
           score: stat.scoreNum,
           combo: stat.combo,
-          maxcombo: stat.maxcombo
+          maxcombo: stat.maxcombo,
+          chartReady: !!selectchart.value
         }, '*');
         break;
       case 'seek':

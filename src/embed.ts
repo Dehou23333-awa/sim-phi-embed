@@ -167,11 +167,9 @@ export class SimPhiEmbed {
     this.post({ action: 'play' });
   }
 
-  /** Pause playback */
+  /** Pause playback. Always sends pause action; iframe handles current state. */
   pause(): void {
-    if (this._state === 'play') {
-      this.post({ action: 'pause' });
-    }
+    this.post({ action: 'pause' });
   }
 
   /** Toggle play/pause */

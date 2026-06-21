@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>sim-phi-embed Demo</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,sans-serif;background:#111;color:#eee;display:flex;height:100vh;overflow:hidden}
+#sidebar{width:320px;min-width:320px;background:#1a1a2e;border-right:1px solid #333;display:flex;flex-direction:column;overflow:hidden}
+#sidebar h1{font-size:15px;padding:14px 16px;border-bottom:1px solid #333;font-weight:600}
+#search{padding:10px 16px;border-bottom:1px solid #222}
+#search input{width:100%;padding:8px 12px;border-radius:6px;border:1px solid #333;background:#0a0a1a;color:#eee;font-size:13px;outline:none}
+#search input:focus{border-color:#0f3460}
+#songList{flex:1;overflow-y:auto;padding:4px 0}
+.song-item{padding:10px 16px;cursor:pointer;border-bottom:1px solid #1a1a2e;transition:background .15s}
+.song-item:hover{background:#16213e}
+.song-item.active{background:#0f3460}
+.song-item .name{font-size:13px}
+.song-item .id{font-size:11px;color:#666;margin-top:2px}
+#main{flex:1;display:flex;flex-direction:column;min-width:0}
+#topbar{display:flex;align-items:center;gap:8px;padding:8px 16px;background:#1a1a2e;border-bottom:1px solid #333;flex-wrap:wrap}
+#topbar button{background:#0f3460;color:#fff;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;font-size:13px}
+#topbar button:disabled{opacity:.3;cursor:default}
+#topbar select{padding:5px 8px;border-radius:4px;border:1px solid #333;background:#0a0a1a;color:#eee;font-size:12px}
+#info{display:flex;gap:16px;padding:12px 16px;background:#16213e;border-bottom:1px solid #333;font-size:12px;color:#aaa;align-items:center;min-height:48px}
+#info img{width:48px;height:48px;border-radius:4px;object-fit:cover;background:#0a0a1a}
+#info .meta{line-height:1.6}
+#info .meta strong{color:#eee}
+#player{flex:1;position:relative;min-height:0;background:#000}
+.loading{display:flex;align-items:center;justify-content:center;height:100%;color:#555;font-size:14px}
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <h1>Phigros Library</h1>
+  <div id="search"><input type="text" id="searchInput" placeholder="Search songs..."></div>
+  <div id="songList"><div class="loading">Loading...</div></div>
+</div>
+
+<div id="main">
+  <div id="topbar">
+    <select id="diffSelect" disabled><option value="">Select difficulty</option></select>
+    <button id="btnPlay" disabled>▶ Play</button>
+  </div>
+  <div id="info"></div>
+  <div id="player"><div class="loading">Select a song to play</div></div>
+</div>
+
+<script type="module">
+import { SimPhiEmbed } from './embed.js';
+
+const BASE = 'https://raw.githubusercontent.com/Dehou23333-awa/PhiResources/main';
+const $ = id => document.getElementById(id);
+
+let player = null;
+let songs = [];
+let currentSongId = null;
+let currentChart = null;
+let statusTimer = null;
+let chartInfo = null;
+let loading = false;
+
+const elSearch = $('searchInput');
+const elSongList = $('songList');
+const elDiff = $('diffSelect');
+const elPlay = $('btnPlay');
+const elInfo = $('info');
+const elPlayer = $('player');
+
+const LEVELS = ['EZ','HD','IN','AT'];
+
+function enableUI(on) { [elPlay,elDiff].forEach(e => e.disabled = !on); }
+enableUI(false);
+
+const resp = await fetch(BASE+'/Chart_info.json');
+chartInfo = await resp.json();
+songs = Object.entries(chartInfo.Songs)
+  .map(([id, s]) => ({ id, name: s.Name, composer: s.Composer, illustrator: s.illustrator||'', data: s }))
+  .sort((a,b) => a.name.localeCompare(b.name));
+
+renderList(songs);
+
+function renderList(list) {
+  elSongList.innerHTML = list.map(s =>
+    `<div class="song-item${s.id===currentSongId?' active':''}" data-id="${s.id}">
+      <div class="name">${esc(s.name)}</div>
+      <div class="id">${esc(s.id)}</div>
+    </div>`
+  ).join('');
+}
+
+function esc(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+elSearch.addEventListener('input', () => {
+  const q = elSearch.value.toLowerCase();
+  renderList(songs.filter(s => s.name.toLowerCase().includes(q) || s.id.toLowerCase().includes(q)));
+});
+
+elSongList.addEventListener('click', e => {
+  const item = e.target.closest('.song-item');
+  if (item) selectSong(item.dataset.id);
+});
+
+function selectSong(id) {
+  currentSongId = id;
+  currentChart = null;
+  document.querySelectorAll('.song-item').forEach(e => e.classList.toggle('active', e.dataset.id===id));
+  const s = chartInfo.Songs[id];
+  if (!s) return;
+
+  elInfo.innerHTML = `
+    <img src="${BASE}/ill/${enc(id)}.png" onerror="this.style.display='none'" alt="">
+    <div class="meta">
+      <strong>${esc(s.Name)}</strong> · ${esc(s.Composer)}<br>
+      ${s.illustrator ? 'Illustrator: '+esc(s.illustrator) : ''}
+    </div>
+  `;
+
+  elDiff.innerHTML = '<option value="">Select difficulty</option>';
+  for (const lv of LEVELS) {
+    if (!s[lv]) continue;
+    const o = document.createElement('option');
+    o.value = lv;
+    o.textContent = `${lv} Lv.${s[lv].difficulty} — ${s[lv].charter||'?'}`;
+    elDiff.appendChild(o);
+  }
+  if (LEVELS.find(lv => s[lv])) {
+    elDiff.value = LEVELS.find(lv => s[lv]);
+    enableUI(true);
+  } else {
+    enableUI(false);
+  }
+}
+
+function enc(id) { return encodeURIComponent(id); }
+
+elDiff.addEventListener('change', () => enableUI(!!elDiff.value));
+
+elPlay.addEventListener('click', async () => {
+  if (!currentSongId || !elDiff.value || loading) return;
+  const diff = elDiff.value;
+  const chartKey = `${currentSongId}/${diff}`;
+
+  if (player && currentChart === chartKey) {
+    if (elPlay.textContent === '⏸ Pause') { player.pause(); }
+    else { player.play(); }
+    return;
+  }
+
+  loading = true;
+  elPlay.disabled = true;
+  if (player) { player.destroy(); clearInterval(statusTimer); statusTimer=null; }
+
+  try {
+    elPlay.textContent = 'Downloading...';
+    const encId = enc(currentSongId);
+    const [chartR, bgmR, illR] = await Promise.all([
+      fetch(`${BASE}/chart/${encId}.0/${diff}.json`),
+      fetch(`${BASE}/music/${encId}.ogg`),
+      fetch(`${BASE}/ill/${encId}.png`)
+    ]);
+    if (!chartR.ok) throw new Error('Chart fetch failed: HTTP '+chartR.status);
+    if (!bgmR.ok) throw new Error('BGM fetch failed: HTTP '+bgmR.status);
+
+    const [chartBlob, bgmBlob, illBlob] = await Promise.all([
+      chartR.blob(), bgmR.blob(), illR.ok ? illR.blob() : null
+    ]);
+
+    elPlay.textContent = 'Building .pez...';
+    const zip = new JSZip();
+    zip.file(`${diff}.json`, chartBlob);
+    zip.file(`${currentSongId}.ogg`, bgmBlob);
+    if (illBlob) zip.file(`${currentSongId}.png`, illBlob);
+    zip.file('info.txt', [
+      `Name: ${chartInfo.Songs[currentSongId].Name}`,
+      `Song: ${currentSongId}.ogg`,
+      `Picture: ${currentSongId}.png`,
+      `Chart: ${diff}.json`,
+      `Level: ${diff} Lv.${chartInfo.Songs[currentSongId][diff]?.difficulty||'?'}`,
+      `Composer: ${chartInfo.Songs[currentSongId].Composer}`,
+      `Charter: ${chartInfo.Songs[currentSongId][diff]?.charter||'?'}`
+    ].join('\n'));
+    const pezBlob = await zip.generateAsync({ type:'blob', compression:'DEFLATE', compressionOptions:{level:9} });
+    const pezFile = new File([pezBlob], `${currentSongId}.${diff}.pez`);
+
+    elPlayer.innerHTML = '';
+    player = new SimPhiEmbed(elPlayer, { baseUrl:'./' });
+    currentChart = chartKey;
+
+    // Sync button text when game state changes
+    player.onStatus((status) => {
+      elPlay.textContent = status.state === 'play' ? '⏸ Pause' : '▶ Play';
+    });
+
+    player.onReady(() => {
+      player.post(pezFile);
+      // Wait for zip processing, then play
+      // The play handler auto-selects the first chart if none is selected
+      setTimeout(() => {
+        if (loading) {
+          player.play();
+          loading = false;
+          enableUI(true);
+        }
+      }, 2000);
+    });
+
+    statusTimer = setInterval(() => player?.ready && player.getStatus(), 1000);
+
+  } catch (err) {
+    console.error(err);
+    loading = false;
+    elPlay.textContent = '▶ Play';
+    enableUI(true);
+  }
+});
+</script>
+</body>
+</html>

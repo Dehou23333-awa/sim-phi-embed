@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync, writeFileSync, cpSync } from 'fs';
 import { resolve } from 'path';
 import { fileURLToPath } from 'url';
 import pkg from '../package.json' with { type: 'json' };
@@ -14,3 +14,5 @@ if (target === targetNew) {
 } else {
   console.log('Updated successfully.');
 }
+cpSync(resolve(dir, '..', 'demo.html'), resolve(dir, '..', 'dist', 'demo.html'));
+console.log('Copied demo.html to dist/');
