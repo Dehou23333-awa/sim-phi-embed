@@ -8,6 +8,6 @@ const extendsDir = resolve(dir, '..', 'node_modules', '@sim-phi', 'extends');
 
 if (!existsSync(resolve(extendsDir, 'dist', 'index.js'))) {
   console.log('Building @sim-phi/extends...');
-  execSync('npm install && npm run build', { cwd: extendsDir, stdio: 'inherit' });
+  execSync('npm install && npx vite build', { cwd: extendsDir, stdio: 'inherit' });
   console.log('@sim-phi/extends built.');
 }
