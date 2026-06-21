@@ -5,14 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build && node scripts/build.js",
+    "build": "node scripts/build-extends.js && tsc && vite build && node scripts/build.js",
     "build:embed": "esbuild src/embed.ts --bundle --format=esm --outfile=dist/embed.js --minify",
     "preview": "vite preview",
     "eslint:check": "eslint src",
     "eslint:format": "eslint --fix src"
   },
   "dependencies": {
-    "@sim-phi/extends": "file:../extends",
+    "@sim-phi/extends": "sim-phi/extends",
     "jszip": "^3.10.1",
     "md5": "^2.3.0",
     "stackblur-canvas": "^2.7.0"
