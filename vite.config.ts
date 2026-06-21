@@ -20,7 +20,7 @@ export default defineConfig({
     sourcemap: true,
     cssTarget: 'chrome61',
     rollupOptions: {
-      external: [/^\/utils\//],
+      external: [/^\/utils\//, '@sim-phi/extends'],
       output: {
         plugins: [
           getBabelOutputPlugin({

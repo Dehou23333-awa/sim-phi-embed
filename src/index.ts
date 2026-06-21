@@ -913,7 +913,7 @@ window.addEventListener('load', (): void => {
         lockOri.label.textContent += '(当前设备或浏览器不支持)';
       }
     })) return;
-    await import('@/utils/reader-');
+    try { await import('@/utils/reader-'); } catch { console.warn('PEC extension not loaded'); }
     const raw = await loadResource(resLink).catch(() => null) || {
       image: {} as Record<string, string>,
       audio: {} as Record<string, string>,
